@@ -43,13 +43,14 @@ func Run(ctx context.Context, conf *Config, c reviewdog.CommentService, d review
 		}
 		g.Go(func() error {
 			defer func() { <-semaphore }()
-			return rd.Run(io.MultiReader(stdout, stderr))
+			err := rd.Run(io.MultiReader(stdout, stderr))
+			if err != nil {
+				return fmt.Errorf("fail to run reviewdog: %s: %v", runner.Name, err)
+			}
+			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		return fmt.Errorf("fail to run reviewdog: %v", err)
-	}
-	return nil
+	return g.Wait()
 }
 
 var secretEnvs = [...]string{
