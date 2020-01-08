@@ -31,7 +31,15 @@ import (
 	githubservice "github.com/reviewdog/reviewdog/service/github"
 	"github.com/reviewdog/reviewdog/service/github/githubutils"
 	gitlabservice "github.com/reviewdog/reviewdog/service/gitlab"
+
+	"github.com/sirupsen/logrus"
 )
+
+var logger = logrus.New()
+
+// func init() {
+// 	logger.Info("foo")
+// }
 
 const usageMessage = "" +
 	`Usage:	reviewdog [flags]
@@ -40,6 +48,7 @@ const usageMessage = "" +
 	GitHub if you use reviewdog in CI service.`
 
 type option struct {
+	wataashDebug     bool
 	version          bool
 	diffCmd          string
 	diffStrip        int
@@ -142,6 +151,7 @@ const (
 var opt = &option{}
 
 func init() {
+	flag.BoolVar(&opt.wataashDebug, "wataash-debug", false, "wataash-debug")
 	flag.BoolVar(&opt.version, "version", false, "print version")
 	flag.StringVar(&opt.diffCmd, "diff", "", diffCmdDoc)
 	flag.IntVar(&opt.diffStrip, "strip", 1, diffStripDoc)
@@ -167,9 +177,48 @@ func usage() {
 	os.Exit(2)
 }
 
+var inClangTidy = `
+foo.c:735:8: (clang-tidy) warning: narrowing conversion from 'unsigned long' to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
+`
+
+// -f rubocop
+var inRuboColor = "\x1b[36mfoo.rb\x1b[0m:1:1: C: Style/FrozenStringLiteralComment: Missing magic comment # frozen_string_literal: true.\n" +
+	"puts 1\n" +
+	"^\n"
+var diffRuboColor = `
+diff --git a/foo.rb b/foo.rb
+index bc8fe6d..4944c1d 100644
+--- a/foo.rb
++++ b/foo.rb
+@@ -1,3 +1,3 @@
+- puts 0
++ puts 1
+
+exit
+`
+
 func main() {
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Debugf("reviewdog version %s", commands.Version)
 	flag.Usage = usage
 	flag.Parse()
+	if opt.wataashDebug {
+		logger.Debug("set stdin, -diff, -f")
+
+		opt.diffCmd = "cat tmp.diff"
+
+		// in := strings.NewReader(inClangTidy)
+
+		in := strings.NewReader(inRuboColor)
+		opt.f = "rubocop"
+		ioutil.WriteFile("tmp.diff", []byte(diffRuboColor), 0644)
+
+		if err := run(in, os.Stdout, opt); err != nil {
+			logger.Errorf("reviewdog: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if err := run(os.Stdin, os.Stdout, opt); err != nil {
 		fmt.Fprintf(os.Stderr, "reviewdog: %v\n", err)
 		os.Exit(1)
@@ -296,12 +345,15 @@ github-pr-check reporter as a fallback.
 	}
 
 	if isProject {
+		logger.Debug("isProject")
 		conf, err := projectConfig(opt.conf)
 		if err != nil {
 			return err
 		}
 		return project.Run(ctx, conf, buildRunnersMap(opt.runners), cs, ds, opt.tee)
 	}
+
+	logger.Debug("!isProject")
 
 	p, err := newParserFromOpt(opt)
 	if err != nil {

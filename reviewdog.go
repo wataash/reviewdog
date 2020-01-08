@@ -81,7 +81,9 @@ func (w *Reviewdog) runFromResult(ctx context.Context, results []*CheckResult,
 
 	checks := FilterCheck(results, filediffs, strip, wd)
 	for _, check := range checks {
+		fmt.Println("check")
 		if !check.InDiff {
+			fmt.Println("not InDiff")
 			continue
 		}
 		comment := &Comment{
@@ -90,6 +92,7 @@ func (w *Reviewdog) runFromResult(ctx context.Context, results []*CheckResult,
 			LnumDiff:    check.LnumDiff,
 			ToolName:    w.toolname,
 		}
+		fmt.Println("post")
 		if err := w.c.Post(ctx, comment); err != nil {
 			return err
 		}
